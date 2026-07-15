@@ -507,9 +507,3 @@ services:
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.homeassistant.entrypoints=websecure"
-      - "traefik.http.routers.homeassistant.rule=Host(`assistant.yodah.fr`)"
-      - "traefik.http.routers.homeassistant.tls=true"
-      - "traefik.http.routers.homeassistant.tls.certresolver=infomaniak"
-      - "traefik.http.services.homeassistant.loadbalancer.server.url=http://172.18.0.1:8123"
