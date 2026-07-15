@@ -1,0 +1,29 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+
+  # HomeAssistant est en network_mode: host
+  # Il faut un router/service dans le fichier dynamique pour que Traefik l'atteigne
+  routers:
+    homeassistant:
+      rule: "Host(`assistant.yodah.fr`)"
+      entryPoints:
+        - "websecure"
+      service: "homeassistant"
+      tls:
+        certResolver: "infomaniak"
+
+  services:
+    homeassistant:
+      loadBalancer:
+        servers:
+          - url: "http://172.18.0.1:8123"

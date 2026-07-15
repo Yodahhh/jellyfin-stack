@@ -1,0 +1,132 @@
+# ==============================================
+# SECRETS & CONFIGURATION LOCALE
+# ==============================================
+.env
+*.env.local
+
+# ==============================================
+# DONNÉES DES SERVICES (ne pas versionner)
+# ==============================================
+*/db/
+*/cache/
+*/backup/
+*/Backups/
+*/logs/
+*/log/
+*/MediaCover/
+*/.db-*
+*.db
+*.db-shm
+*.db-wal
+
+# ==============================================
+# CONFIGS GÉNÉRÉES / CLÉS APPLICATIVES
+# ==============================================
+
+# Clés API et configs runtime des services *ARR (Sonarr, Radarr, Prowlarr, Bazarr, etc.)
+# Ces fichiers contiennent des clés API générées automatiquement au premier démarrage
+*/config.xml
+*/config.yaml
+*/config.yml
+
+# Clés ASP.NET Data Protection (générées automatiquement)
+*/asp/
+
+# Analytics & caches Bazarr
+bazarr/config/analytics_visitor_id.txt
+bazarr/config/announcements.json
+bazarr/config/releases.txt
+bazarr/config/throttled_providers.dat
+
+# ==============================================
+# QBITTORRENT
+# ==============================================
+qbittorrent/qBittorrent/BT_backup/
+qbittorrent/qBittorrent/data/
+qbittorrent/qBittorrent/*.conf
+!qbittorrent/qBittorrent/qBittorrent.conf.example
+
+# ==============================================
+# TRAEFIK
+# ==============================================
+traefik/acme.json
+# Les templates Traefik DOIVENT être versionnés
+!traefik/traefik.yml
+!traefik/config.yml
+
+# ==============================================
+# JELLYFIN
+# ==============================================
+jellyfin/config/
+jellyfin/data/
+jellyfin/metadata/
+jellyfin/plugins/
+jellyfin/transcodes/
+
+# ==============================================
+# HOME ASSISTANT
+# ==============================================
+homeassistant/.storage/
+homeassistant/home-assistant.log*
+homeassistant/tts/
+
+# ==============================================
+# YGEGE - Indexer custom
+# ==============================================
+ygege/data.db
+ygege-vpn/data.db
+
+# ==============================================
+# PROWLARR - Custom Definitions
+# ==============================================
+prowlarr/Definitions/Custom/*.yml
+!prowlarr/Definitions/Custom/.gitkeep
+
+# ==============================================
+# AUTOBRR
+# ==============================================
+autobrr/*.db
+autobrr/*.db-*
+
+# ==============================================
+# CROSS-SEED
+# ==============================================
+cross-seed/*.db
+cross-seed/*.db-*
+cross-seed/cache/
+
+# ==============================================
+# FLARESOLVERR
+# ==============================================
+flaresolverr/
+
+# ==============================================
+# BACKUPS (jamais dans le repo)
+# ==============================================
+.git-backup/
+*.tar.gz
+*.tar.bz2
+*.zip
+*.7z
+
+# ==============================================
+# FICHIERS TEMPORAIRES
+# ==============================================
+*.bak
+*.bak.*
+*.tmp
+*.swp
+*~
+
+# ==============================================
+# OS
+# ==============================================
+.DS_Store
+Thumbs.db
+
+# ==============================================
+# IDE
+# ==============================================
+.vscode/
+.idea/
+*.iml
