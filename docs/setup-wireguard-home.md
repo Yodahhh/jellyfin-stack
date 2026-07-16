@@ -37,8 +37,8 @@ PrivateKey = <CONTENU_DU_FICHIER_PRIVATEKEY>
 
 [Peer]
 # Le VPS
-PublicKey = <CLE_PUBLIQUE_DU_VPS>
-Endpoint = IP_VPS:51820
+PublicKey = X6rl/iYwy7YkUcVI+6Yszwox/Y4zoA0quEy01omnv1c=
+Endpoint = 179.237.83.38:51820
 # On autorise uniquement le trafic destiné/venant de la gateway VPS elle-même
 AllowedIPs = 10.100.0.1/32
 PersistentKeepalive = 25
