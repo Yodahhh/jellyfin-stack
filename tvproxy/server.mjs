@@ -26,7 +26,7 @@ const CHANNELS = [
   { chno: 8, slug: "lcp", name: "LCP", tvgId: "LaChaineParlementaire.fr", group: "TNT", patterns: [/^LCP\b/i, /^LA CHAINE PARLEMENTAIRE/i] },
   { chno: 9, slug: "w9", name: "W9", tvgId: "W9.fr", group: "TNT", patterns: [/^W9 FHD\b/i, /^W9 HD\b/i, /^W9 \./i] },
   { chno: 10, slug: "tmc", name: "TMC", tvgId: "TMC.fr", group: "TNT", patterns: [/^TMC FHD\b/i, /^TMC HD\b/i, /^TMC \./i] },
-  { chno: 11, slug: "tfx", name: "TFX", tvgId: "NT1.fr", group: "TNT", patterns: [/^TFX FHD\b/i, /^TFX HD\b/i, /^TFX \./i] },
+  { chno: 11, slug: "tfx", name: "TFX", tvgId: "NT1.fr", group: "TNT", patterns: [/^TFX \.c/i, /^TFX \.b/i, /^TFX FHD\b/i, /^TFX/i] },
   { chno: 12, slug: "gulli", name: "Gulli", tvgId: "Gulli.fr", group: "TNT", patterns: [/^GULLI FHD\b/i, /^GULLI HD\b/i, /^GULLI \./i] },
   { chno: 13, slug: "bfmtv", name: "BFM TV", tvgId: "BFMTV.fr", group: "TNT", patterns: [/^BFM TV HD\b/i, /^BFM HD\b/i, /^BFM TV \./i] },
   { chno: 14, slug: "cnews", name: "CNews", tvgId: "CNews.fr", group: "TNT", patterns: [/^CNEWS FHD\b/i, /^CNEWS HD\b/i, /^CNEWS \./i] },
@@ -72,7 +72,7 @@ const CHANNELS = [
   { chno: 50, slug: "canalplus-boxoffice", name: "Canal+ Box Office", tvgId: "CanalPlusBoxOffice.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ BOX OFFICE\b/i] },
   { chno: 51, slug: "canalplus-cinema", name: "Canal+ Cinéma(s)", tvgId: "CanalPlusCinema.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ CINEMA\b/i, /^CANAL\+ CINEMAS\b/i] },
   { chno: 52, slug: "canalplus-grandecran", name: "Canal+ Grand Écran", tvgId: "CanalPlusGrandEcran.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ GRAND ECRAN\b/i] },
-  { chno: 53, slug: "canalplus-series", name: "Canal+ Séries", tvgId: "CanalPlusSeries.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ SERIES\b/i] },
+  { chno: 53, slug: "canalplus-series", name: "Canal+ Séries", tvgId: "CanalPlusSeries.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ SERIES \.c/i, /^CANAL\+ SERIES HD \.b/i, /^CANAL\+ SERIES \.s/i, /^CANAL\+ SERIES/i] },
   { chno: 54, slug: "canalplus-docs", name: "Canal+ Docs", tvgId: "CanalPlusDocs.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ DOCS\b/i] },
   { chno: 55, slug: "canalplus-kids", name: "Canal+ Kids", tvgId: "CanalPlusKIDS.fr", group: "Cinéma & Séries", patterns: [/^CANAL\+ KIDS\b/i] },
   { chno: 56, slug: "cineplus-premier", name: "Ciné+ Premier", tvgId: "CinePlusPremier.fr", group: "Cinéma & Séries", patterns: [/^CINE\+ PREMIER\b/i] },
@@ -457,14 +457,27 @@ async function findWorkingStreamForChannel(channel, excludeUrls = new Set()) {
   throw new Error(`No working stream found for ${channel.name}`);
 }
 
-// Continuous MPEG-TS byte pump: buffer-based downloads (avoids Undici stream pauses) and forward-monotonic timestamps
+// Continuous MPEG-TS byte pump with parallel pre-buffering, segment retry/skip and real-time logging
 async function streamContinuousMpegTs(req, res, channel) {
+  const reqStart = Date.now();
   let closed = false;
-  req.on("close", () => { closed = true; });
+  let totalBytes = 0;
+  let segmentsPumped = 0;
+
+  const logPrefix = `[tvproxy] [${channel.slug}]`;
+  console.log(`${logPrefix} ▶ Client connected (${req.socket?.remoteAddress || "client"})`);
+
+  req.on("close", () => {
+    closed = true;
+    const durSec = Math.round((Date.now() - reqStart) / 1000);
+    const mb = (totalBytes / 1024 / 1024).toFixed(2);
+    console.log(`${logPrefix} ⏹ Client disconnected after ${durSec}s (${segmentsPumped} segs, ${mb} MB)`);
+  });
   res.on("close", () => { closed = true; });
 
   const excludeUrls = new Set();
   let currentSource = await findWorkingStreamForChannel(channel, excludeUrls);
+  console.log(`${logPrefix} Source: ${currentSource.name} (${new URL(currentSource.finalUrl).host})`);
 
   res.writeHead(200, {
     "content-type": "video/mp2t",
@@ -487,72 +500,126 @@ async function streamContinuousMpegTs(req, res, channel) {
         throw new Error("Empty playlist returned by upstream");
       }
 
-      // Initial buffer: take last 2 segments for 20s initial play cushion.
-      // Subsequent polls: only download segments not yet seen.
-      let segsToPlay;
+      // Initial startup: download the last 3 segments in parallel to give the player an instant 30-second buffer!
       if (isFirstPoll) {
-        segsToPlay = allSegs.slice(-2);
         isFirstPoll = false;
-      } else {
-        segsToPlay = allSegs.filter((s) => !seenSegments.has(s.key));
+        const initialSegs = allSegs.slice(-3);
+        console.log(`${logPrefix} Pre-buffering ${initialSegs.length} segments in parallel (~30s buffer)...`);
+
+        const downloaded = await Promise.all(
+          initialSegs.map(async (seg) => {
+            try {
+              const t0 = Date.now();
+              const sRes = await fetch(seg.url, {
+                headers: { "User-Agent": "VAVOO/2.6" },
+                redirect: "follow",
+                signal: AbortSignal.timeout(10000)
+              });
+              if (!sRes.ok) return null;
+              const ab = await sRes.arrayBuffer();
+              return { seg, buf: Buffer.from(ab), ms: Date.now() - t0 };
+            } catch (_) {
+              return null;
+            }
+          })
+        );
+
+        for (const item of downloaded) {
+          if (closed) break;
+          if (!item) continue;
+          seenSegments.add(item.seg.key);
+          totalBytes += item.buf.length;
+          segmentsPumped++;
+          if (!res.write(item.buf)) {
+            await new Promise((r) => res.once("drain", r));
+          }
+        }
+        console.log(`${logPrefix} ✅ Pre-buffer sent: ${segmentsPumped} segments (${(totalBytes / 1024 / 1024).toFixed(2)} MB)`);
+        consecutiveErrors = 0;
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
       }
 
+      // Subsequent polls: only download segments not yet seen
+      const segsToPlay = allSegs.filter((s) => !seenSegments.has(s.key));
       let downloadedAny = false;
+
       for (const seg of segsToPlay) {
         if (closed) break;
         if (seenSegments.has(seg.key)) continue;
+
+        // Download segment with 1 retry on error
+        let arrayBuf = null;
+        let t0 = Date.now();
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            t0 = Date.now();
+            const segRes = await fetch(seg.url, {
+              headers: { "User-Agent": "VAVOO/2.6" },
+              redirect: "follow",
+              signal: AbortSignal.timeout(12000)
+            });
+            if (!segRes.ok) throw new Error(`HTTP ${segRes.status}`);
+            arrayBuf = await segRes.arrayBuffer();
+            break;
+          } catch (e) {
+            if (attempt === 1) {
+              console.warn(`${logPrefix} ⚠️ Segment fetch hiccup, retrying: ${e.message}`);
+              await new Promise((r) => setTimeout(r, 600));
+            } else {
+              console.error(`${logPrefix} ❌ Segment #${seg.seq} failed after 2 attempts: ${e.message}. Skipping.`);
+            }
+          }
+        }
+
+        // Even if segment failed, mark it seen so we don't get stuck in an infinite retry loop
         seenSegments.add(seg.key);
         if (seenSegments.size > 200) {
           const oldest = seenSegments.values().next().value;
           seenSegments.delete(oldest);
         }
 
-        const segRes = await fetch(seg.url, {
-          headers: { "User-Agent": "VAVOO/2.6" },
-          redirect: "follow",
-          signal: AbortSignal.timeout(12000)
-        });
-        if (!segRes.ok) {
-          throw new Error(`Segment HTTP ${segRes.status}`);
+        if (arrayBuf && arrayBuf.byteLength > 0) {
+          if (closed) break;
+          const buf = Buffer.from(arrayBuf);
+          totalBytes += buf.length;
+          segmentsPumped++;
+          const segMb = (buf.length / 1024 / 1024).toFixed(2);
+          const dlMs = Date.now() - t0;
+          if (!res.write(buf)) {
+            await new Promise((r) => res.once("drain", r));
+          }
+          console.log(`${logPrefix} Seg #${seg.seq} pumped (${segMb} MB in ${dlMs}ms)`);
+          downloadedAny = true;
+          consecutiveErrors = 0;
         }
-
-        // Buffer-based reading: prevents Undici assert(!this.paused) when socket backpressures
-        const arrayBuf = await segRes.arrayBuffer();
-        if (closed) break;
-
-        const buf = Buffer.from(arrayBuf);
-        if (!res.write(buf)) {
-          await new Promise((r) => res.once("drain", r));
-        }
-        downloadedAny = true;
-        consecutiveErrors = 0;
       }
 
       if (closed) break;
-      // Pace polling: segments are ~10-12s. Check every 3.5s if data downloaded, 2s if waiting.
-      await new Promise((r) => setTimeout(r, downloadedAny ? 3500 : 2000));
+      // Pace polling: 2.5s if segment downloaded, 2s if waiting for broadcaster
+      await new Promise((r) => setTimeout(r, downloadedAny ? 2500 : 2000));
     } catch (err) {
       if (closed) break;
       consecutiveErrors++;
-      console.warn(`[tvproxy] Stream hiccup on ${channel.slug} (${currentSource.name}, attempt ${consecutiveErrors}/4): ${err.message}`);
+      console.warn(`${logPrefix} ⚠️ Stream hiccup (${currentSource.name}, error ${consecutiveErrors}/4): ${err.message}`);
 
-      // Failover ONLY after 4 consecutive failures
+      // Failover ONLY after 4 consecutive playlist failures
       if (consecutiveErrors >= 4) {
         excludeUrls.add(currentSource.finalUrl);
         activeStreams.delete(channel.slug);
         try {
-          console.log(`[tvproxy] Failing over to next source for ${channel.slug}...`);
+          console.log(`${logPrefix} 🔄 Failing over to backup source...`);
           currentSource = await findWorkingStreamForChannel(channel, excludeUrls);
           seenSegments.clear();
-          isFirstPoll = false; // Never jump backwards in time on failover
+          isFirstPoll = false;
           consecutiveErrors = 0;
-          console.log(`[tvproxy] Failover succeeded for ${channel.slug} -> ${currentSource.name}`);
+          console.log(`${logPrefix} ✅ Failover succeeded -> ${currentSource.name} (${new URL(currentSource.finalUrl).host})`);
         } catch (failoverErr) {
-          console.error(`[tvproxy] All sources exhausted for ${channel.slug}: ${failoverErr.message}`);
+          console.error(`${logPrefix} 🛑 All sources exhausted: ${failoverErr.message}`);
           break;
         }
       } else {
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 1200));
       }
     }
   }
