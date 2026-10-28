@@ -507,3 +507,22 @@ services:
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+
+  # ============================================
+  # TVPROXY - Passerelle TV en direct (99 chaines) & EPG Jellyfin
+  # ============================================
+  tvproxy:
+    image: node:24-alpine
+    container_name: tvproxy
+    restart: unless-stopped
+    network_mode: service:gluetun
+    environment:
+      - TZ=Europe/Paris
+      - PORT=8899
+    volumes:
+      - /opt/docker/tvproxy:/app:ro
+    command: node /app/server.mjs
+    depends_on:
+      - gluetun
+    labels:
+      - com.centurylinklabs.watchtower.enable=false

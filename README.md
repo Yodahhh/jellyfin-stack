@@ -2,7 +2,7 @@
 
 Stack Docker complète pour serveur média personnel avec Jellyfin, gestion automatique des téléchargements (ARR), VPN WireGuard, reverse proxy HTTPS, et dashboard.
 
-**20 services Docker** — prêt à déployer sur un serveur Linux.
+**21 services Docker** — prêt à déployer sur un serveur Linux.
 
 ## 🚀 Installation Rapide
 
@@ -33,7 +33,7 @@ Le script va :
 6. ✅ Configurer le cron watchdog VPN
 7. ✅ Copier les fichiers dans /opt/docker/
 
-## 📦 Services Inclus (20 conteneurs)
+## 📦 Services Inclus (21 conteneurs)
 
 ### 🎥 Médias & Streaming
 | Service | Description | URL |
@@ -41,6 +41,7 @@ Le script va :
 | **Jellyfin** | Serveur média (comme Plex mais open-source) | `jellyfin.votredomaine.fr` |
 | **Jellyseerr** | Interface de demandes films/séries | `requests.votredomaine.fr` |
 | **jfa-go** | Gestion des invitations Jellyfin | `invite.votredomaine.fr` |
+| **TVProxy** | Passerelle TV direct (99 chaînes TNT, Sport, Cinéma) & EPG | Interne (`http://gluetun:8899`) |
 
 ### 📥 Stack ARR (Gestion automatique)
 | Service | Description | URL |
@@ -230,6 +231,12 @@ docker compose logs -f
    - Films : `/media/movies`
    - Séries : `/media/series`
 3. Activer l'accélération matérielle (Intel QSV) si GPU disponible
+4. **Configurer la TV en direct (Live TV)** :
+   - Dans **Tableau de bord** > **TV en direct** > **Tuners M3U** (+), ajouter l'URL : `http://gluetun:8899/playlist.m3u`
+   - ✅ **Cocher impérativement "Ignorer les horodatages DTS" (Ignore DTS)** pour un flux stable sans sauts de timecode.
+   - Dans **Fournisseurs TV Guide** (+), ajouter l'XMLTV : `http://gluetun:8899/epg.xml`
+   - Dans **Tâches planifiées**, exécuter **Actualiser le guide TV** (99 chaînes et 27 000+ programmes indexés).
+   - Plus de détails dans [tvproxy/README.md](tvproxy/README.md).
 
 ### 5. Bazarr
 1. Configurer les connexions vers Sonarr (`http://sonarr:8989`) et Radarr (`http://radarr:7878`)

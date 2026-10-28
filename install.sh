@@ -63,7 +63,7 @@ MEDIA_PATH=${MEDIA_PATH:-/mnt/media}
 mkdir -p "$MEDIA_PATH"/{downloads,downloads/incomplete,downloads/watch,movies,series,books,backups}
 
 # Créer les dossiers de config Docker
-mkdir -p /opt/docker/{traefik,qbittorrent,prowlarr,sonarr,radarr,bookshelf,jellyseerr,jellyfin,jfa-go,bazarr,ygege,ygege-vpn,recyclarr,autobrr,cross-seed,homepage,homeassistant,flaresolverr}
+mkdir -p /opt/docker/{traefik,qbittorrent,prowlarr,sonarr,radarr,bookshelf,jellyseerr,jellyfin,jfa-go,bazarr,ygege,ygege-vpn,recyclarr,autobrr,cross-seed,homepage,homeassistant,flaresolverr,tvproxy}
 
 # Permissions
 chown -R 1000:1000 "$MEDIA_PATH"
@@ -116,6 +116,11 @@ mkdir -p /opt/docker/scripts
 cp scripts/*.sh /opt/docker/scripts/
 chmod +x /opt/docker/scripts/*.sh
 echo "✅ Scripts de maintenance copiés"
+
+# Copier TVProxy
+mkdir -p /opt/docker/tvproxy
+cp tvproxy/* /opt/docker/tvproxy/
+echo "✅ Fichiers TVProxy copiés"
 
 # ============================================
 # 5. Configuration Traefik (domaine)
